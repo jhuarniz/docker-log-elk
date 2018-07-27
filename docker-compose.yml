@@ -1,0 +1,95 @@
+version: '3.6'
+services:      
+ ##STACK ELK
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.3.2
+    volumes:
+      #- ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+      - esdata:/usr/share/elasticsearch/data
+    #ports:
+    #  - "9200:9200"
+    #  - "9300:9300"
+    environment:
+      discovery.type: 'single-node'
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"    
+      xpack.security.enabled: 'false'
+      xpack.monitoring.enabled: 'false'
+      xpack.graph.enabled: 'false'
+      xpack.watcher.enabled: 'false'
+    labels:
+      logspout.exclude: 'true' 
+    deploy:
+      replicas: 1
+#      placement:
+#        constraints:
+#          - node.hostname == agent1
+   # networks:
+   #   - ELK 
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:6.3.2
+    volumes:
+      # - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logstash/patterns:/usr/share/logstash/patterns:ro
+    #ports:
+    #  - "5000:5000"
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+      XPACK_MONITORING_ENABLED: 'false'
+    labels:
+      logspout.exclude: 'true'
+    deploy:
+      replicas: 1
+    #networks:
+    #  - ELK
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:6.3.2
+    #unnecessary, using defaults.
+    #dashboards and index are stored on elasticsearch
+    #volumes:
+    #  - ./kibana/config/:/usr/share/kibana/config:ro
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_URL: 'http://elasticsearch:9200'
+      XPACK_SECURITY_ENABLED: 'false'
+      XPACK_MONITORING_ENABLED: 'false'
+    labels:
+      logspout.exclude: 'true'
+    #networks:
+    #  - ELK
+    depends_on:
+      - elasticsearch
+    deploy:
+      replicas: 1
+      
+##LOGSPOUT
+  logspout:
+    image: bekt/logspout-logstash
+    environment:
+      ROUTE_URIS: 'logstash://logstash:5000'
+      EXCLUDE_LABEL: 'logspout.exclude'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    #networks:
+    #  - ELK
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+        delay: 30s
+    depends_on:
+      - logstash
+
+volumes:
+  esdata:
+    driver: local
+#networks:
+#  ELK:
+#    name: ELK
+#    driver: overlay
+#
